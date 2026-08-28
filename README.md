@@ -13,7 +13,7 @@ MVP de um walkie-talkie mobile para duas pessoas, feito como PWA com WebRTC via 
 
 Além do modo privado para duas pessoas, há um piloto para pequenas equipes. O responsável cadastra o evento e até seis participantes, recebe um link individual para cada codinome e envia os convites. Cada participante entra diretamente na equipe pelo seu link.
 
-O piloto usa uma malha WebRTC direta entre os aparelhos. Para equipes maiores ou uso profissional, a próxima arquitetura deve usar um servidor SFU dedicado.
+O modo Eventos usa LiveKit Cloud (SFU + TURN) para conectar participantes em redes e operadoras diferentes. Os tokens são emitidos por uma função protegida na Vercel, e as credenciais principais nunca são enviadas ao navegador nem publicadas no GitHub.
 
 ## Como usar
 
