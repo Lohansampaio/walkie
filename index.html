@@ -22,6 +22,8 @@
     #join{width:100%;margin-top:16px;border-radius:14px;padding:14px;background:linear-gradient(135deg,var(--pink),#ca326a)}
     #join:disabled{opacity:.55;cursor:wait}
     #room[hidden]{display:none}
+    .person{display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:18px}.avatar{width:48px;height:48px;border-radius:50%;display:grid;place-items:center;background:linear-gradient(135deg,#ff7aa2,#a91e51);font-weight:900;font-size:1.2rem;box-shadow:0 8px 24px #ff4f8140}.person-text{text-align:left}.person-text strong,.person-text small{display:block}.person-text small{color:var(--muted);margin-top:3px}
+    #incoming{min-height:28px;margin:0 0 10px;color:#ffb1ca;font-weight:800;opacity:0;transition:opacity .2s}#incoming.active{opacity:1}
     #status{display:inline-flex;align-items:center;gap:8px;margin:0 0 24px;color:var(--muted);font-size:.92rem}.dot{width:9px;height:9px;border-radius:99px;background:#777;box-shadow:0 0 0 5px #7772}.online .dot{background:var(--ok);box-shadow:0 0 0 5px #55e69b22}
     #talk{width:min(68vw,250px);aspect-ratio:1;border-radius:50%;background:radial-gradient(circle at 35% 28%,var(--pink2),var(--pink) 48%,#bd275a);box-shadow:0 16px 40px #ff4f8150,inset 0 2px 3px #fff6;display:grid;place-content:center;margin:auto;transition:transform .12s,filter .12s;user-select:none}
     #talk span{display:block;font-size:1.15rem;letter-spacing:.04em}#talk small{display:block;margin-top:8px;font-size:2rem}
@@ -42,7 +44,9 @@
       <p id="error" class="error" role="alert"></p>
     </section>
     <section id="room" class="card" hidden>
+      <div class="person"><div id="avatar" class="avatar">A</div><div class="person-text"><strong id="partnerName">Seu amor</strong><small>Walkie particular</small></div></div>
       <p id="status"><i class="dot"></i><span>Conectando…</span></p>
+      <p id="incoming" aria-live="polite">Seu amor está falando…</p>
       <button id="talk" aria-label="Segure para falar"><span>SEGURE<br>PARA FALAR</span><small>🎙️</small></button>
       <p class="hint">Mantenha esta página aberta durante o teste.</p>
     </section>
@@ -51,7 +55,7 @@
   <script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js"></script>
   <script>
     const $=id=>document.getElementById(id), setup=$('setup'), room=$('room'), join=$('join'), talk=$('talk'), status=$('status'), error=$('error'), remote=$('remote');
-    let peer,call,stream;
+    let peer,call,dataConnection,stream,myCode,partnerCode,reconnectTimer;
     const clean=v=>'walkie-love-'+v.trim().toLowerCase().replace(/[^a-z0-9_-]/g,'').slice(0,32);
     const setStatus=(text,online=false)=>{status.querySelector('span').textContent=text;status.classList.toggle('online',online)};
     async function start(){
@@ -59,22 +63,33 @@
       if(mine==='walkie-love-'||theirs==='walkie-love-'||mine===theirs){error.textContent='Use dois códigos diferentes.';return}
       join.disabled=true; error.textContent='';
       try{
+        myCode=$('mine').value.trim(); partnerCode=$('theirs').value.trim();
+        $('partnerName').textContent=partnerCode; $('avatar').textContent=(partnerCode[0]||'A').toUpperCase();
         stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true},video:false});
         stream.getAudioTracks().forEach(t=>t.enabled=false);
         peer=new Peer(mine);
         peer.on('open',()=>{setup.hidden=true;room.hidden=false;setStatus('Procurando seu amor…');connect(theirs)});
         peer.on('call',incoming=>{call?.close();call=incoming;incoming.answer(stream);wireCall(incoming)});
+        peer.on('connection',wireData);
         peer.on('error',e=>{if(e.type==='unavailable-id')fail('Este código já está em uso.');else if(e.type!=='peer-unavailable')fail('Não foi possível conectar. Tente novamente.')});
       }catch(e){fail('Permita o acesso ao microfone para continuar.')}
     }
-    function connect(id){const outgoing=peer.call(id,stream);if(outgoing){call=outgoing;wireCall(outgoing)}setTimeout(()=>{if(!call?.open&&peer&&!peer.destroyed)connect(id)},3000)}
-    function wireCall(c){c.on('stream',s=>{remote.srcObject=s;remote.play().catch(()=>{});setStatus('Conectados',true)});c.on('close',()=>setStatus('Reconectando…'));c.on('error',()=>setStatus('Reconectando…'))}
+    function connect(id){
+      clearTimeout(reconnectTimer);
+      if(!dataConnection?.open) wireData(peer.connect(id,{reliable:true}));
+      const outgoing=peer.call(id,stream);if(outgoing){call=outgoing;wireCall(outgoing)}
+      reconnectTimer=setTimeout(()=>{if(!call?.open&&peer&&!peer.destroyed)connect(id)},3000)
+    }
+    function wireData(c){dataConnection=c;c.on('data',message=>{if(message?.type==='talking')incoming(message.value)});c.on('close',()=>incoming(false))}
+    function wireCall(c){c.on('stream',s=>{remote.srcObject=s;remote.play().catch(()=>{});setStatus('Conectados',true);clearTimeout(reconnectTimer)});c.on('close',()=>{setStatus('Reconectando…');connect(clean(partnerCode))});c.on('error',()=>setStatus('Reconectando…'))}
+    function incoming(on){const el=$('incoming');el.textContent=`${partnerCode||'Seu amor'} está falando…`;el.classList.toggle('active',on);if(on&&navigator.vibrate)navigator.vibrate([80,45,80])}
     function fail(msg){error.textContent=msg;join.disabled=false;if(!setup.hidden)return;setStatus(msg)}
-    function speaking(on){if(!stream)return;stream.getAudioTracks().forEach(t=>t.enabled=on);talk.classList.toggle('talking',on);talk.querySelector('span').innerHTML=on?'FALANDO…':'SEGURE<br>PARA FALAR'}
+    function speaking(on){if(!stream)return;stream.getAudioTracks().forEach(t=>t.enabled=on);talk.classList.toggle('talking',on);talk.querySelector('span').innerHTML=on?'FALANDO…':'SEGURE<br>PARA FALAR';if(dataConnection?.open)dataConnection.send({type:'talking',value:on})}
     ['pointerdown','touchstart'].forEach(ev=>talk.addEventListener(ev,e=>{e.preventDefault();speaking(true)},{passive:false}));
     ['pointerup','pointercancel','pointerleave','touchend','touchcancel'].forEach(ev=>talk.addEventListener(ev,e=>{e.preventDefault();speaking(false)},{passive:false}));
     document.addEventListener('visibilitychange',()=>{if(document.hidden)speaking(false)});
     join.addEventListener('click',start);
+    if('serviceWorker'in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
   </script>
 </body>
 </html>
