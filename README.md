@@ -2,6 +2,13 @@
 
 MVP de um walkie-talkie mobile para duas pessoas, feito como PWA com WebRTC via PeerJS.
 
+## V0.2
+
+- Nome e inicial da outra pessoa na sala.
+- Aviso visual e vibração quando a outra pessoa começa a falar.
+- Reconexão automática mais clara.
+- Cache do aplicativo para carregamento rápido e instalação como PWA.
+
 ## Como usar
 
 1. Abra o site em dois celulares e permita o acesso ao microfone.
@@ -20,4 +27,6 @@ O acesso precisa ser feito por HTTPS (por exemplo, usando GitHub Pages). Para in
 ## Publicação no GitHub Pages
 
 Em **Settings → Pages**, selecione **Deploy from a branch**, escolha a branch `main` e a pasta `/ (root)`.
+
+O repositório também pode ser conectado à Vercel; cada alteração enviada à `main` gera uma nova publicação automaticamente.
 
