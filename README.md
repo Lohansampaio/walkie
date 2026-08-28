@@ -9,6 +9,12 @@ MVP de um walkie-talkie mobile para duas pessoas, feito como PWA com WebRTC via 
 - Reconexão automática mais clara.
 - Cache do aplicativo para carregamento rápido e instalação como PWA.
 
+## Eventos beta
+
+Além do modo privado para duas pessoas, há um piloto para pequenas equipes. O responsável cadastra o evento e até seis participantes, recebe um link individual para cada codinome e envia os convites. Cada participante entra diretamente na equipe pelo seu link.
+
+O piloto usa uma malha WebRTC direta entre os aparelhos. Para equipes maiores ou uso profissional, a próxima arquitetura deve usar um servidor SFU dedicado.
+
 ## Como usar
 
 1. Abra o site em dois celulares e permita o acesso ao microfone.
