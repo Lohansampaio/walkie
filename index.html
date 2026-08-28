@@ -1,96 +1,26 @@
-<!doctype html>
-<html lang="pt-BR">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-  <meta name="theme-color" content="#ff4f81">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <title>Walkie Love</title>
-  <link rel="manifest" href="manifest.webmanifest">
-  <style>
-    :root{color-scheme:dark;--pink:#ff4f81;--pink2:#ff7aa2;--ink:#fff;--muted:#cbbbc4;--panel:#21151d;--bg:#100a0e;--ok:#55e69b}
-    *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-    body{margin:0;min-height:100svh;font-family:Inter,ui-rounded,system-ui,-apple-system,sans-serif;color:var(--ink);background:radial-gradient(circle at 50% 0,#3b1727 0,transparent 45%),var(--bg);display:grid;place-items:center;padding:max(22px,env(safe-area-inset-top)) 20px max(22px,env(safe-area-inset-bottom));overscroll-behavior:none}
-    main{width:min(100%,430px);text-align:center}
-    h1{font-size:clamp(2rem,10vw,3.2rem);letter-spacing:-.06em;margin:0 0 8px}.heart{color:var(--pink)}
-    .tagline{margin:0 0 28px;color:var(--muted)}
-    .card{background:color-mix(in srgb,var(--panel) 92%,transparent);border:1px solid #ffffff18;border-radius:24px;padding:20px;box-shadow:0 20px 60px #0008;backdrop-filter:blur(12px)}
-    .fields{display:grid;gap:12px;text-align:left}label{font-size:.78rem;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.08em}
-    input{width:100%;margin-top:6px;border:1px solid #ffffff20;border-radius:14px;background:#0e090c;color:#fff;padding:14px 15px;font:inherit;outline:none}input:focus{border-color:var(--pink)}
-    button{font:inherit;font-weight:800;color:#fff;border:0;cursor:pointer;touch-action:none}
-    #join{width:100%;margin-top:16px;border-radius:14px;padding:14px;background:linear-gradient(135deg,var(--pink),#ca326a)}
-    #join:disabled{opacity:.55;cursor:wait}
-    #room[hidden]{display:none}
-    .person{display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:18px}.avatar{width:48px;height:48px;border-radius:50%;display:grid;place-items:center;background:linear-gradient(135deg,#ff7aa2,#a91e51);font-weight:900;font-size:1.2rem;box-shadow:0 8px 24px #ff4f8140}.person-text{text-align:left}.person-text strong,.person-text small{display:block}.person-text small{color:var(--muted);margin-top:3px}
-    #incoming{min-height:28px;margin:0 0 10px;color:#ffb1ca;font-weight:800;opacity:0;transition:opacity .2s}#incoming.active{opacity:1}
-    #status{display:inline-flex;align-items:center;gap:8px;margin:0 0 24px;color:var(--muted);font-size:.92rem}.dot{width:9px;height:9px;border-radius:99px;background:#777;box-shadow:0 0 0 5px #7772}.online .dot{background:var(--ok);box-shadow:0 0 0 5px #55e69b22}
-    #talk{width:min(68vw,250px);aspect-ratio:1;border-radius:50%;background:radial-gradient(circle at 35% 28%,var(--pink2),var(--pink) 48%,#bd275a);box-shadow:0 16px 40px #ff4f8150,inset 0 2px 3px #fff6;display:grid;place-content:center;margin:auto;transition:transform .12s,filter .12s;user-select:none}
-    #talk span{display:block;font-size:1.15rem;letter-spacing:.04em}#talk small{display:block;margin-top:8px;font-size:2rem}
-    #talk.talking{transform:scale(.95);filter:brightness(1.2);box-shadow:0 8px 22px #ff4f8190,inset 0 3px 15px #8e174b}
-    .hint{color:var(--muted);font-size:.86rem;margin:20px 0 0}.error{color:#ff9ab8;min-height:1.3em;margin:12px 0 0;font-size:.88rem}
-  </style>
-</head>
-<body>
-  <main>
-    <h1>Walkie <span class="heart">Love</span></h1>
-    <p class="tagline">Aperte, fale, solte. Só vocês dois.</p>
-    <section id="setup" class="card">
-      <div class="fields">
-        <label>Seu código<input id="mine" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="ex.: lohan"></label>
-        <label>Código da outra pessoa<input id="theirs" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="ex.: amor"></label>
-      </div>
-      <button id="join">Entrar</button>
-      <p id="error" class="error" role="alert"></p>
-    </section>
-    <section id="room" class="card" hidden>
-      <div class="person"><div id="avatar" class="avatar">A</div><div class="person-text"><strong id="partnerName">Seu amor</strong><small>Walkie particular</small></div></div>
-      <p id="status"><i class="dot"></i><span>Conectando…</span></p>
-      <p id="incoming" aria-live="polite">Seu amor está falando…</p>
-      <button id="talk" aria-label="Segure para falar"><span>SEGURE<br>PARA FALAR</span><small>🎙️</small></button>
-      <p class="hint">Mantenha esta página aberta durante o teste.</p>
-    </section>
-  </main>
-  <audio id="remote" autoplay playsinline></audio>
-  <script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js"></script>
-  <script>
-    const $=id=>document.getElementById(id), setup=$('setup'), room=$('room'), join=$('join'), talk=$('talk'), status=$('status'), error=$('error'), remote=$('remote');
-    let peer,call,dataConnection,stream,myCode,partnerCode,reconnectTimer;
-    const clean=v=>'walkie-love-'+v.trim().toLowerCase().replace(/[^a-z0-9_-]/g,'').slice(0,32);
-    const setStatus=(text,online=false)=>{status.querySelector('span').textContent=text;status.classList.toggle('online',online)};
-    async function start(){
-      const mine=clean($('mine').value), theirs=clean($('theirs').value);
-      if(mine==='walkie-love-'||theirs==='walkie-love-'||mine===theirs){error.textContent='Use dois códigos diferentes.';return}
-      join.disabled=true; error.textContent='';
-      try{
-        myCode=$('mine').value.trim(); partnerCode=$('theirs').value.trim();
-        $('partnerName').textContent=partnerCode; $('avatar').textContent=(partnerCode[0]||'A').toUpperCase();
-        stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true},video:false});
-        stream.getAudioTracks().forEach(t=>t.enabled=false);
-        peer=new Peer(mine);
-        peer.on('open',()=>{setup.hidden=true;room.hidden=false;setStatus('Procurando seu amor…');connect(theirs)});
-        peer.on('call',incoming=>{call?.close();call=incoming;incoming.answer(stream);wireCall(incoming)});
-        peer.on('connection',wireData);
-        peer.on('error',e=>{if(e.type==='unavailable-id')fail('Este código já está em uso.');else if(e.type!=='peer-unavailable')fail('Não foi possível conectar. Tente novamente.')});
-      }catch(e){fail('Permita o acesso ao microfone para continuar.')}
-    }
-    function connect(id){
-      clearTimeout(reconnectTimer);
-      if(!dataConnection?.open) wireData(peer.connect(id,{reliable:true}));
-      const outgoing=peer.call(id,stream);if(outgoing){call=outgoing;wireCall(outgoing)}
-      reconnectTimer=setTimeout(()=>{if(!call?.open&&peer&&!peer.destroyed)connect(id)},3000)
-    }
-    function wireData(c){dataConnection=c;c.on('data',message=>{if(message?.type==='talking')incoming(message.value)});c.on('close',()=>incoming(false))}
-    function wireCall(c){c.on('stream',s=>{remote.srcObject=s;remote.play().catch(()=>{});setStatus('Conectados',true);clearTimeout(reconnectTimer)});c.on('close',()=>{setStatus('Reconectando…');connect(clean(partnerCode))});c.on('error',()=>setStatus('Reconectando…'))}
-    function incoming(on){const el=$('incoming');el.textContent=`${partnerCode||'Seu amor'} está falando…`;el.classList.toggle('active',on);if(on&&navigator.vibrate)navigator.vibrate([80,45,80])}
-    function fail(msg){error.textContent=msg;join.disabled=false;if(!setup.hidden)return;setStatus(msg)}
-    function speaking(on){if(!stream)return;stream.getAudioTracks().forEach(t=>t.enabled=on);talk.classList.toggle('talking',on);talk.querySelector('span').innerHTML=on?'FALANDO…':'SEGURE<br>PARA FALAR';if(dataConnection?.open)dataConnection.send({type:'talking',value:on})}
-    ['pointerdown','touchstart'].forEach(ev=>talk.addEventListener(ev,e=>{e.preventDefault();speaking(true)},{passive:false}));
-    ['pointerup','pointercancel','pointerleave','touchend','touchcancel'].forEach(ev=>talk.addEventListener(ev,e=>{e.preventDefault();speaking(false)},{passive:false}));
-    document.addEventListener('visibilitychange',()=>{if(document.hidden)speaking(false)});
-    join.addEventListener('click',start);
-    if('serviceWorker'in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
-  </script>
-</body>
-</html>
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"><meta name="theme-color" content="#ff4f81"><meta name="apple-mobile-web-app-capable" content="yes"><title>Walkie</title><link rel="manifest" href="manifest.webmanifest"><style>
+:root{color-scheme:dark;--pink:#ff4f81;--violet:#665cff;--muted:#cbbbc4;--panel:#21151d;--bg:#100a0e;--ok:#55e69b}*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}body{margin:0;min-height:100svh;font-family:Inter,system-ui,-apple-system,sans-serif;color:#fff;background:radial-gradient(circle at 50% 0,#3b1727 0,transparent 45%),var(--bg);display:grid;place-items:center;padding:22px 20px;overscroll-behavior:none}main{width:min(100%,480px);text-align:center}h1{font-size:clamp(2rem,10vw,3.2rem);letter-spacing:-.06em;margin:0 0 8px}.heart{color:var(--pink)}.tagline{margin:0 0 24px;color:var(--muted)}.card{background:color-mix(in srgb,var(--panel) 92%,transparent);border:1px solid #ffffff18;border-radius:24px;padding:20px;box-shadow:0 20px 60px #0008}.screen[hidden]{display:none}.modes{display:grid;grid-template-columns:1fr 1fr;gap:12px}.mode{border:1px solid #ffffff1c;border-radius:20px;background:#0e090c;padding:22px 12px;color:#fff}.mode b,.mode small{display:block}.mode b{margin:8px 0}.mode small{color:var(--muted);font-weight:500}.mode-icon{font-size:2rem}.fields{display:grid;gap:12px;text-align:left}label{font-size:.76rem;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.07em}input,textarea{width:100%;margin-top:6px;border:1px solid #ffffff20;border-radius:14px;background:#0e090c;color:#fff;padding:14px 15px;font:inherit;outline:none}textarea{min-height:130px;resize:vertical}input:focus,textarea:focus{border-color:var(--pink)}button{font:inherit;font-weight:800;color:#fff;border:0;cursor:pointer;touch-action:none}.primary{width:100%;margin-top:16px;border-radius:14px;padding:14px;background:linear-gradient(135deg,var(--pink),#ca326a)}.primary.event{background:linear-gradient(135deg,#786fff,#4b42ce)}button:disabled{opacity:.55}.back{background:none;color:var(--muted);margin-bottom:14px}.note{font-size:.82rem;color:var(--muted);line-height:1.45}.error{color:#ff9ab8;min-height:1.3em;margin:12px 0 0;font-size:.88rem}.person{display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:14px}.avatar{width:48px;height:48px;border-radius:50%;display:grid;place-items:center;background:linear-gradient(135deg,#ff7aa2,#a91e51);font-weight:900;font-size:1.2rem}.event-avatar{background:linear-gradient(135deg,#8179ff,#3730a3)}.person-text{text-align:left}.person-text strong,.person-text small{display:block}.person-text small{color:var(--muted);margin-top:3px}#status{display:inline-flex;align-items:center;gap:8px;margin:0 0 16px;color:var(--muted);font-size:.92rem}.dot{width:9px;height:9px;border-radius:99px;background:#777}.online .dot{background:var(--ok);box-shadow:0 0 0 5px #55e69b22}#incoming{min-height:28px;margin:0 0 10px;color:#ffb1ca;font-weight:800;opacity:0}#incoming.active{opacity:1}#talk{width:min(68vw,250px);aspect-ratio:1;border-radius:50%;background:radial-gradient(circle at 35% 28%,#ff7aa2,var(--pink) 48%,#bd275a);box-shadow:0 16px 40px #ff4f8150;display:grid;place-content:center;margin:auto;transition:transform .12s;user-select:none}#talk.event{background:radial-gradient(circle at 35% 28%,#948dff,var(--violet) 48%,#3730a3)}#talk span{font-size:1.15rem}#talk small{display:block;margin-top:8px;font-size:2rem}#talk.talking{transform:scale(.95)}.hint{color:var(--muted);font-size:.86rem}.online-list{display:flex;justify-content:center;flex-wrap:wrap;gap:7px;margin:0 0 14px}.pill{font-size:.74rem;background:#ffffff10;color:var(--muted);padding:6px 9px;border-radius:99px}.pill.on{color:#9ff7c8;background:#55e69b16}.links{text-align:left;display:grid;gap:10px}.invite{background:#0e090c;border:1px solid #ffffff16;border-radius:14px;padding:12px}.invite strong,.invite small{display:block}.invite small{color:var(--muted);margin:3px 0 8px}.copy{background:var(--violet);border-radius:9px;padding:8px 11px;font-size:.78rem}.beta{background:#665cff22;color:#a9a4ff;border-radius:99px;padding:4px 8px;font-size:.68rem}
+</style></head><body><main><h1>Walkie <span class="heart">Love</span></h1><p class="tagline">Conexão instantânea, do casal à equipe.</p>
+<section id="home" class="card screen"><div class="modes"><button class="mode" data-go="couple"><span class="mode-icon">❤️</span><b>Casal</b><small>Conversa privada para dois</small></button><button class="mode" data-go="organizer"><span class="mode-icon">🎧</span><b>Eventos <span class="beta">BETA</span></b><small>Crie uma equipe e convites</small></button></div></section>
+<section id="couple" class="card screen" hidden><button class="back" data-go="home">← Voltar</button><div class="fields"><label>Seu código<input id="mine" autocapitalize="none" placeholder="ex.: lohan"></label><label>Código da outra pessoa<input id="theirs" autocapitalize="none" placeholder="ex.: amor"></label></div><button id="joinCouple" class="primary">Entrar no privado</button><p id="coupleError" class="error"></p></section>
+<section id="organizer" class="card screen" hidden><button class="back" data-go="home">← Voltar</button><div class="fields"><label>Nome do evento<input id="eventName" placeholder="ex.: Festival de Verão"></label><label>Equipe — uma pessoa por linha<textarea id="members" placeholder="Águia | Coordenação&#10;Lua | Palco&#10;Falcão | Segurança"></textarea></label></div><button id="createEvent" class="primary event">Gerar convites</button><p class="note">Piloto indicado para até 6 pessoas. Os links são individuais.</p><p id="eventError" class="error"></p></section>
+<section id="invites" class="card screen" hidden><button class="back" data-go="organizer">← Editar equipe</button><h2>Convites prontos</h2><p class="note">Envie somente o link correspondente a cada pessoa.</p><div id="inviteList" class="links"></div></section>
+<section id="eventJoin" class="card screen" hidden><div class="person"><div id="joinAvatar" class="avatar event-avatar">A</div><div class="person-text"><strong id="joinName">Codinome</strong><small id="joinRole">Função</small></div></div><h2 id="joinEvent">Evento</h2><p class="note">Seu acesso já está configurado. Permita o microfone.</p><button id="joinTeam" class="primary event">Entrar na equipe</button><p id="joinError" class="error"></p></section>
+<section id="room" class="card screen" hidden><div class="person"><div id="avatar" class="avatar">A</div><div class="person-text"><strong id="roomTitle">Seu amor</strong><small id="roomSubtitle">Walkie particular</small></div></div><p id="status"><i class="dot"></i><span>Conectando…</span></p><div id="onlineList" class="online-list"></div><p id="incoming">Alguém está falando…</p><button id="talk"><span>SEGURE<br>PARA FALAR</span><small>🎙️</small></button><p class="hint">Mantenha esta página aberta durante o teste.</p></section><audio id="remote" autoplay playsinline></audio>
+</main><script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js"></script><script>
+const $=id=>document.getElementById(id),screens=[...document.querySelectorAll('.screen')],talk=$('talk');let peer,stream,mode,connections=new Map(),calls=new Map(),eventConfig,currentMember;
+const show=id=>screens.forEach(s=>s.hidden=s.id!==id),slug=v=>v.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9_-]/g,'').slice(0,36),random=()=>crypto.getRandomValues(new Uint32Array(2)).join('').slice(0,12),encode=o=>btoa(unescape(encodeURIComponent(JSON.stringify(o)))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''),decode=s=>JSON.parse(decodeURIComponent(escape(atob(s.replace(/-/g,'+').replace(/_/g,'/')))));
+const setStatus=(text,on=false)=>{$('status').querySelector('span').textContent=text;$('status').classList.toggle('online',on)};document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>show(b.dataset.go));
+async function getMic(){if(stream)return stream;stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true},video:false});stream.getAudioTracks().forEach(t=>t.enabled=false);return stream}function reset(){connections.forEach(x=>x.conn.close());calls.forEach(x=>x.close());connections.clear();calls.clear();peer?.destroy();peer=null}
+function enterRoom(title,sub,initial,event=false){$('roomTitle').textContent=title;$('roomSubtitle').textContent=sub;$('avatar').textContent=(initial||'A').toUpperCase();$('avatar').classList.toggle('event-avatar',event);talk.classList.toggle('event',event);show('room');setStatus('Conectando…');renderOnline()}
+const currentName=()=>mode==='event'?currentMember.name:$('mine').value.trim();
+function wireData(c,name){connections.set(c.peer,{conn:c,name,online:false});c.on('open',()=>{const x=connections.get(c.peer);if(x)x.online=true;c.send({type:'hello',name:currentName()});renderOnline();setStatus('Conectados',true)});c.on('data',m=>{if(m?.type==='hello'){const x=connections.get(c.peer);if(x)x.name=m.name;renderOnline()}if(m?.type==='talking')incoming(m.value,m.name)});c.on('close',()=>{const x=connections.get(c.peer);if(x)x.online=false;incoming(false);renderOnline()})}
+function wireCall(c){calls.set(c.peer,c);c.on('stream',s=>{let a=document.querySelector(`audio[data-peer="${c.peer}"]`);if(!a){a=document.createElement('audio');a.autoplay=true;a.playsInline=true;a.dataset.peer=c.peer;document.body.appendChild(a)}a.srcObject=s;a.play().catch(()=>{});setStatus('Conectados',true)});c.on('close',()=>calls.delete(c.peer))}function connectTo(id,name){if(!connections.has(id))wireData(peer.connect(id,{reliable:true}),name);if(!calls.has(id))wireCall(peer.call(id,stream))}
+function incoming(on,name='Alguém'){const el=$('incoming');el.textContent=`${name} está falando…`;el.classList.toggle('active',on);if(on&&navigator.vibrate)navigator.vibrate([80,45,80])}function renderOnline(){if(mode!=='event')return $('onlineList').innerHTML='';$('onlineList').innerHTML=eventConfig.members.map(m=>{const self=m.token===currentMember.token,id=`walkie-event-${eventConfig.id}-${m.token}`,on=self||connections.get(id)?.online;return `<span class="pill ${on?'on':''}">${m.name}${self?' (você)':''}</span>`}).join('')}
+$('joinCouple').onclick=async()=>{const mine=slug($('mine').value),theirs=slug($('theirs').value),err=$('coupleError');if(!mine||!theirs||mine===theirs)return err.textContent='Use dois códigos diferentes.';err.textContent='';try{reset();mode='couple';currentMember={name:$('mine').value.trim()};await getMic();peer=new Peer('walkie-love-'+mine);peer.on('open',()=>{enterRoom($('theirs').value.trim(),'Walkie particular',$('theirs').value.trim()[0]);connectTo('walkie-love-'+theirs,$('theirs').value.trim())});peer.on('call',c=>{c.answer(stream);wireCall(c)});peer.on('connection',c=>wireData(c,$('theirs').value.trim()))}catch(e){err.textContent='Permita o acesso ao microfone.'}};
+$('createEvent').onclick=()=>{const name=$('eventName').value.trim(),lines=$('members').value.split('\n').map(x=>x.trim()).filter(Boolean),err=$('eventError');if(!name||lines.length<2)return err.textContent='Informe o evento e pelo menos duas pessoas.';if(lines.length>6)return err.textContent='Neste piloto, use no máximo 6 pessoas.';eventConfig={id:random(),name,members:lines.map(line=>{const [n,r]=line.split('|').map(x=>x.trim());return{name:n,role:r||'Equipe',token:random()}})};const payload=encode(eventConfig),base=location.origin+location.pathname;$('inviteList').innerHTML=eventConfig.members.map(m=>{const url=`${base}?event=${payload}&member=${m.token}`;return `<div class="invite"><strong>${m.name}</strong><small>${m.role} · codinome individual</small><button class="copy" data-url="${url.replace(/&/g,'&amp;')}">Copiar link</button></div>`}).join('');document.querySelectorAll('.copy').forEach(b=>b.onclick=async()=>{await navigator.clipboard.writeText(b.dataset.url);b.textContent='Copiado ✓'});show('invites')};
+$('joinTeam').onclick=async()=>{const err=$('joinError');try{reset();mode='event';await getMic();peer=new Peer(`walkie-event-${eventConfig.id}-${currentMember.token}`);peer.on('open',()=>{enterRoom(eventConfig.name,`${currentMember.name} · ${currentMember.role}`,currentMember.name[0],true);eventConfig.members.filter(m=>m.token!==currentMember.token).forEach(m=>connectTo(`walkie-event-${eventConfig.id}-${m.token}`,m.name))});peer.on('call',c=>{c.answer(stream);wireCall(c)});peer.on('connection',c=>wireData(c,eventConfig.members.find(m=>c.peer.endsWith(m.token))?.name||'Equipe'))}catch(e){err.textContent='Permita o acesso ao microfone.'}};
+function speaking(on){if(!stream)return;stream.getAudioTracks().forEach(t=>t.enabled=on);talk.classList.toggle('talking',on);talk.querySelector('span').innerHTML=on?'FALANDO…':'SEGURE<br>PARA FALAR';connections.forEach(x=>{if(x.conn.open)x.conn.send({type:'talking',value:on,name:currentName()})})}['pointerdown','touchstart'].forEach(ev=>talk.addEventListener(ev,e=>{e.preventDefault();speaking(true)},{passive:false}));['pointerup','pointercancel','pointerleave','touchend','touchcancel'].forEach(ev=>talk.addEventListener(ev,e=>{e.preventDefault();speaking(false)},{passive:false}));document.addEventListener('visibilitychange',()=>{if(document.hidden)speaking(false)});
+try{const p=new URLSearchParams(location.search);if(p.has('event')){eventConfig=decode(p.get('event'));currentMember=eventConfig.members.find(m=>m.token===p.get('member'));if(!currentMember)throw 0;$('joinAvatar').textContent=currentMember.name[0].toUpperCase();$('joinName').textContent=currentMember.name;$('joinRole').textContent=currentMember.role;$('joinEvent').textContent=eventConfig.name;show('eventJoin')}}catch(e){history.replaceState({},'',location.pathname);show('home')}if('serviceWorker'in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
+</script></body></html>
 
