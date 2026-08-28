@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+  <meta name="theme-color" content="#ff4f81">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Walkie Love</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <style>
+    :root{color-scheme:dark;--pink:#ff4f81;--pink2:#ff7aa2;--ink:#fff;--muted:#cbbbc4;--panel:#21151d;--bg:#100a0e;--ok:#55e69b}
+    *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+    body{margin:0;min-height:100svh;font-family:Inter,ui-rounded,system-ui,-apple-system,sans-serif;color:var(--ink);background:radial-gradient(circle at 50% 0,#3b1727 0,transparent 45%),var(--bg);display:grid;place-items:center;padding:max(22px,env(safe-area-inset-top)) 20px max(22px,env(safe-area-inset-bottom));overscroll-behavior:none}
+    main{width:min(100%,430px);text-align:center}
+    h1{font-size:clamp(2rem,10vw,3.2rem);letter-spacing:-.06em;margin:0 0 8px}.heart{color:var(--pink)}
+    .tagline{margin:0 0 28px;color:var(--muted)}
+    .card{background:color-mix(in srgb,var(--panel) 92%,transparent);border:1px solid #ffffff18;border-radius:24px;padding:20px;box-shadow:0 20px 60px #0008;backdrop-filter:blur(12px)}
+    .fields{display:grid;gap:12px;text-align:left}label{font-size:.78rem;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.08em}
+    input{width:100%;margin-top:6px;border:1px solid #ffffff20;border-radius:14px;background:#0e090c;color:#fff;padding:14px 15px;font:inherit;outline:none}input:focus{border-color:var(--pink)}
+    button{font:inherit;font-weight:800;color:#fff;border:0;cursor:pointer;touch-action:none}
+    #join{width:100%;margin-top:16px;border-radius:14px;padding:14px;background:linear-gradient(135deg,var(--pink),#ca326a)}
+    #join:disabled{opacity:.55;cursor:wait}
+    #room[hidden]{display:none}
+    #status{display:inline-flex;align-items:center;gap:8px;margin:0 0 24px;color:var(--muted);font-size:.92rem}.dot{width:9px;height:9px;border-radius:99px;background:#777;box-shadow:0 0 0 5px #7772}.online .dot{background:var(--ok);box-shadow:0 0 0 5px #55e69b22}
+    #talk{width:min(68vw,250px);aspect-ratio:1;border-radius:50%;background:radial-gradient(circle at 35% 28%,var(--pink2),var(--pink) 48%,#bd275a);box-shadow:0 16px 40px #ff4f8150,inset 0 2px 3px #fff6;display:grid;place-content:center;margin:auto;transition:transform .12s,filter .12s;user-select:none}
+    #talk span{display:block;font-size:1.15rem;letter-spacing:.04em}#talk small{display:block;margin-top:8px;font-size:2rem}
+    #talk.talking{transform:scale(.95);filter:brightness(1.2);box-shadow:0 8px 22px #ff4f8190,inset 0 3px 15px #8e174b}
+    .hint{color:var(--muted);font-size:.86rem;margin:20px 0 0}.error{color:#ff9ab8;min-height:1.3em;margin:12px 0 0;font-size:.88rem}
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Walkie <span class="heart">Love</span></h1>
+    <p class="tagline">Aperte, fale, solte. Só vocês dois.</p>
+    <section id="setup" class="card">
+      <div class="fields">
+        <label>Seu código<input id="mine" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="ex.: lohan"></label>
+        <label>Código da outra pessoa<input id="theirs" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="ex.: amor"></label>
+      </div>
+      <button id="join">Entrar</button>
+      <p id="error" class="error" role="alert"></p>
+    </section>
+    <section id="room" class="card" hidden>
+      <p id="status"><i class="dot"></i><span>Conectando…</span></p>
+      <button id="talk" aria-label="Segure para falar"><span>SEGURE<br>PARA FALAR</span><small>🎙️</small></button>
+      <p class="hint">Mantenha esta página aberta durante o teste.</p>
+    </section>
+  </main>
+  <audio id="remote" autoplay playsinline></audio>
+  <script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js"></script>
+  <script>
+    const $=id=>document.getElementById(id), setup=$('setup'), room=$('room'), join=$('join'), talk=$('talk'), status=$('status'), error=$('error'), remote=$('remote');
+    let peer,call,stream;
+    const clean=v=>'walkie-love-'+v.trim().toLowerCase().replace(/[^a-z0-9_-]/g,'').slice(0,32);
+    const setStatus=(text,online=false)=>{status.querySelector('span').textContent=text;status.classList.toggle('online',online)};
+    async function start(){
+      const mine=clean($('mine').value), theirs=clean($('theirs').value);
+      if(mine==='walkie-love-'||theirs==='walkie-love-'||mine===theirs){error.textContent='Use dois códigos diferentes.';return}
+      join.disabled=true; error.textContent='';
+      try{
+        stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true},video:false});
+        stream.getAudioTracks().forEach(t=>t.enabled=false);
+        peer=new Peer(mine);
+        peer.on('open',()=>{setup.hidden=true;room.hidden=false;setStatus('Procurando seu amor…');connect(theirs)});
+        peer.on('call',incoming=>{call?.close();call=incoming;incoming.answer(stream);wireCall(incoming)});
+        peer.on('error',e=>{if(e.type==='unavailable-id')fail('Este código já está em uso.');else if(e.type!=='peer-unavailable')fail('Não foi possível conectar. Tente novamente.')});
+      }catch(e){fail('Permita o acesso ao microfone para continuar.')}
+    }
+    function connect(id){const outgoing=peer.call(id,stream);if(outgoing){call=outgoing;wireCall(outgoing)}setTimeout(()=>{if(!call?.open&&peer&&!peer.destroyed)connect(id)},3000)}
+    function wireCall(c){c.on('stream',s=>{remote.srcObject=s;remote.play().catch(()=>{});setStatus('Conectados',true)});c.on('close',()=>setStatus('Reconectando…'));c.on('error',()=>setStatus('Reconectando…'))}
+    function fail(msg){error.textContent=msg;join.disabled=false;if(!setup.hidden)return;setStatus(msg)}
+    function speaking(on){if(!stream)return;stream.getAudioTracks().forEach(t=>t.enabled=on);talk.classList.toggle('talking',on);talk.querySelector('span').innerHTML=on?'FALANDO…':'SEGURE<br>PARA FALAR'}
+    ['pointerdown','touchstart'].forEach(ev=>talk.addEventListener(ev,e=>{e.preventDefault();speaking(true)},{passive:false}));
+    ['pointerup','pointercancel','pointerleave','touchend','touchcancel'].forEach(ev=>talk.addEventListener(ev,e=>{e.preventDefault();speaking(false)},{passive:false}));
+    document.addEventListener('visibilitychange',()=>{if(document.hidden)speaking(false)});
+    join.addEventListener('click',start);
+  </script>
+</body>
+</html>
+
